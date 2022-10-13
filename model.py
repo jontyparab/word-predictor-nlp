@@ -7,7 +7,7 @@ from collections import defaultdict, Counter
 from nltk.corpus import nps_chat
 from xml.etree import ElementTree as ET
 
-class MarkovChain:
+class MarkovChainBackoff:
   def __init__(self):
     self.lookup_dict = defaultdict(list)  
   
@@ -40,24 +40,34 @@ class MarkovChain:
     for i in range(len(data) - n):
       tuple_keys = [ data[i+x] for x in range(n+1) ]
       yield tuple_keys
+      
+  def suggestion_helper(self, gram_list, suggested):
+    new_suggestions = Counter(self.lookup_dict[gram_list]).most_common()[:3-len(suggested)]
+    new_suggestions = [x for x in new_suggestions if (x[0] not in [y[0] for y in suggested])]
+    return new_suggestions
     
-  def oneword(self, gram_list):
-    return Counter(self.lookup_dict[gram_list[-1]]).most_common()[:3]
+    
+  def oneword(self, gram_list, suggested=[]):
+    new_suggestions = self.suggestion_helper(gram_list[-1], suggested)
+    suggest = suggested + new_suggestions
+    return suggest
 
-  def twowords(self, gram_list):
-        suggest = Counter(self.lookup_dict[tuple(gram_list)]).most_common()[:3]
-        if len(suggest)==0:
-            return self.oneword(gram_list[-1:])
-        return suggest
+  def twowords(self, gram_list, suggested=[]):
+    new_suggestions = self.suggestion_helper(tuple(gram_list), suggested)
+    suggest = suggested + new_suggestions
+    if len(suggest) < 3:
+        return self.oneword(gram_list[-1:], suggest)
+    return suggest
 
-  def threewords(self, gram_list):
-        suggest = Counter(self.lookup_dict[tuple(gram_list)]).most_common()[:3]
-        if len(suggest)==0:
-            return self.twowords(gram_list[-2:])
-        return suggest
+  def threewords(self, gram_list, suggested=[]):
+    new_suggestions = self.suggestion_helper(tuple(gram_list), suggested)
+    suggest = suggested + new_suggestions
+    if len(suggest) < 3:
+        return self.twowords(gram_list[-2:], suggest)
+    return suggest
     
   def morewords(self, gram_list):
-        return self.threewords(gram_list[-3:])
+    return self.threewords(gram_list[-3:], [])
 
     
   def generate_suggestion(self, string):
@@ -75,8 +85,15 @@ class MarkovChain:
         return suggestions
     return suggestions
 
-predictor = MarkovChain()
-# for item in ['10-19-20s_706posts.xml']:
+predictor = MarkovChainBackoff()
+
+# for other words
+with open('corpus.txt') as fp:
+  contents = fp.readlines()
+  for line in contents:
+    predictor.add_document_line(line)
+
+# for slang word and abbreviations
 for item in ['10-19-20s_706posts.xml', '10-19-30s_705posts.xml', '10-19-40s_686posts.xml', '10-19-adults_706posts.xml', '10-24-40s_706posts.xml', '10-26-teens_706posts.xml', '11-06-adults_706posts.xml', '11-08-20s_705posts.xml', '11-08-40s_706posts.xml', '11-08-adults_705posts.xml', '11-08-teens_706posts.xml', '11-09-20s_706posts.xml', '11-09-40s_706posts.xml', '11-09-adults_706posts.xml', '11-09-teens_706posts.xml']:
   root = nps_chat.xml(item)
   for post in root.findall('.//*/Post'):
