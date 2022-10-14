@@ -6,10 +6,18 @@ from nltk.tokenize import word_tokenize
 from collections import defaultdict, Counter
 from nltk.corpus import nps_chat
 from xml.etree import ElementTree as ET
+from nltk.probability import ConditionalFreqDist
+from itertools import chain
+import matplotlib.pyplot as plt
 
+# default configurations
+plt.rcParams["font.size"] = 9
+
+# model
 class MarkovChainBackoff:
   def __init__(self):
-    self.lookup_dict = defaultdict(list)  
+    self.lookup_dict = defaultdict(list)
+    self.cfdist = ConditionalFreqDist()
   
   def add_document_line(self, data, preprocessed=False):
     if not preprocessed:
@@ -42,26 +50,32 @@ class MarkovChainBackoff:
       yield tuple_keys
       
   def suggestion_helper(self, gram_list, suggested):
-    new_suggestions = Counter(self.lookup_dict[gram_list]).most_common()[:3-len(suggested)]
-    new_suggestions = [x for x in new_suggestions if (x[0] not in [y[0] for y in suggested])]
-    return new_suggestions
+    # using occurence prioritizing higher ngrams predictions
+    # new_suggestions = Counter(self.lookup_dict[gram_list]).most_common()[:3-len(suggested)]
+    # new_suggestions = [x for x in new_suggestions if (x[0] not in [y[0] for y in suggested])]
+    # suggest = suggested + new_suggestions
+    
+    # using probability
+    new_suggestions = self.cfdist[gram_list]
+    print(new_suggestions)
+    suggest = sorted(suggested + [x for x in new_suggestions if (x[0] not in [y[0] for y in suggested])], 
+                     key = lambda x: x[1], 
+                     reverse=True)[:3]
+    return suggest
     
     
   def oneword(self, gram_list, suggested=[]):
-    new_suggestions = self.suggestion_helper(gram_list[-1], suggested)
-    suggest = suggested + new_suggestions
+    suggest = self.suggestion_helper(gram_list[-1], suggested)
     return suggest
 
   def twowords(self, gram_list, suggested=[]):
-    new_suggestions = self.suggestion_helper(tuple(gram_list), suggested)
-    suggest = suggested + new_suggestions
+    suggest = self.suggestion_helper(tuple(gram_list), suggested)
     if len(suggest) < 3:
         return self.oneword(gram_list[-1:], suggest)
     return suggest
 
   def threewords(self, gram_list, suggested=[]):
-    new_suggestions = self.suggestion_helper(tuple(gram_list), suggested)
-    suggest = suggested + new_suggestions
+    suggest = self.suggestion_helper(tuple(gram_list), suggested)
     if len(suggest) < 3:
         return self.twowords(gram_list[-2:], suggest)
     return suggest
@@ -84,11 +98,41 @@ class MarkovChainBackoff:
             suggestions = self.morewords(tokens)
         return suggestions
     return suggestions
+    
+  def plot_fd(self, n):
+    ntuple_keys = []
+    for key, val in self.lookup_dict.items():
+        if (isinstance(key, tuple) and len(key)==n) or (isinstance(key, str) and n==1):
+            ntuple_keys.append([key]*len(val))
 
+    # chain will flatten the nested arrays
+    fdist = nltk.FreqDist(list(chain(*ntuple_keys)))
+    # print("Most common ngrams: ", fdist.most_common(10))
+    
+    # plotting
+    fig = plt.figure(figsize = (15,10))
+    plt.gcf().subplots_adjust(bottom=0.15) # to avoid x-ticks cut-off
+    fdist.plot(30, cumulative=False)
+    # plt.show()
+    fig.tight_layout()
+    # fig.savefig('freqDist.png', bbox_inches = "tight")
+    
+  def set_cfd(self):
+    # make conditional frequencies dictionary
+    for key, val in self.lookup_dict.items():
+        self.cfdist[key] = Counter(val).most_common()
+    
+    # transform frequencies to probabilities
+    for key in self.cfdist:
+        total_count = float(sum([x[1] for x in self.cfdist[key]]))
+        for idx, (w, c) in enumerate(self.cfdist[key]):
+            self.cfdist[key][idx] = (w, c / total_count)
+
+# initialize
 predictor = MarkovChainBackoff()
 
 # for other words
-with open('corpus.txt') as fp:
+with open('corpus.txt', encoding="utf8") as fp:
   contents = fp.readlines()
   for line in contents:
     predictor.add_document_line(line)
@@ -99,6 +143,11 @@ for item in ['10-19-20s_706posts.xml', '10-19-30s_705posts.xml', '10-19-40s_686p
   for post in root.findall('.//*/Post'):
     if not post.attrib['class']=='System':
       predictor.add_document_line(post.text.strip())
+
+# plotting
+predictor.plot_fd(1)
+predictor.plot_fd(2)
+predictor.set_cfd()
 
 # for Tkinter app, comment the below code
 # while True:
