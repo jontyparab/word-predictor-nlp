@@ -1,11 +1,7 @@
 import nltk
 # nltk.download('all')
-nltk.download(['nps_chat', 'punkt'])
 import re
-from nltk.tokenize import sent_tokenize, TweetTokenizer
 from collections import defaultdict, Counter
-from nltk.corpus import nps_chat
-from xml.etree import ElementTree as ET
 from nltk.probability import ConditionalFreqDist
 from itertools import chain
 import matplotlib.pyplot as plt
@@ -13,12 +9,12 @@ import matplotlib.pyplot as plt
 # default configurations
 plt.rcParams["font.size"] = 9
 
+
 # model
 class MarkovChainBackoff:
   def __init__(self):
     self.lookup_dict = defaultdict(list)
     self.cfdist = ConditionalFreqDist()
-    self.tweet_tokenizer = TweetTokenizer()
     
   def add_document_line(self, data, preprocessed=False):
     if not preprocessed:
@@ -36,10 +32,8 @@ class MarkovChainBackoff:
       self.lookup_dict[tuple([pair[0], pair[1], pair[2]])].append(pair[3])
   
   def _preprocess(self, string):
-    cleaned = re.sub('\d{1,2}-\d{1,2}-\w+', ' ', string).lower()
-    cleaned = re.sub('u\d+', ' ', cleaned)
-    cleaned = re.sub("[^a-zA-Z']+", ' ', cleaned)
-    tokenized = self.tweet_tokenizer.tokenize(text=cleaned)
+    cleaned = re.sub('[^\u0900-\u097F]+',' ', string)
+    tokenized = list(filter(None, re.split('\s+', cleaned)))  # filter handles empty strings
     return tokenized
 
   def __generate_ntuple_keys(self, data, n):
@@ -132,26 +126,20 @@ class MarkovChainBackoff:
 # initialize
 predictor = MarkovChainBackoff()
 
-# for other words
-with open('corpus.txt', encoding="utf8") as fp:
+def get_sentences(text):
+    return list(map(lambda s: s.strip(), re.split('(!|\?|।)', text)[0::2]))
+
+# for hindi words
+with open('corpus_hindi.txt', encoding="utf8") as fp:
   contents = fp.readlines()
-  for para in contents:
-    sentences = sent_tokenize(para)
+  for line in contents:
+    sentences = get_sentences(line)
     for sentence in sentences:
         predictor.add_document_line(sentence)
 
-# for slang word and abbreviations
-for item in ['10-19-20s_706posts.xml', '10-19-30s_705posts.xml', '10-19-40s_686posts.xml', '10-19-adults_706posts.xml', '10-24-40s_706posts.xml', '10-26-teens_706posts.xml', '11-06-adults_706posts.xml', '11-08-20s_705posts.xml', '11-08-40s_706posts.xml', '11-08-adults_705posts.xml', '11-08-teens_706posts.xml', '11-09-20s_706posts.xml', '11-09-40s_706posts.xml', '11-09-adults_706posts.xml', '11-09-teens_706posts.xml']:
-  root = nps_chat.xml(item)
-  for post in root.findall('.//*/Post'):
-    if not post.attrib['class']=='System':
-      sentences = sent_tokenize(post.text.strip())
-      for sentence in sentences:
-        predictor.add_document_line(sentence)
-
 # plotting
-predictor.plot_fd(1)
-predictor.plot_fd(2)
+# predictor.plot_fd(1)
+# predictor.plot_fd(2)
 predictor.set_cfd()
 
 # for Tkinter app, comment the below code

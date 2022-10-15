@@ -1,7 +1,7 @@
 import tkinter as tk
 import tkinter.font as font
 import random
-from model import predictor
+from model_hindi import predictor
 
 # Declaration
 
