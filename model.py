@@ -2,7 +2,7 @@ import nltk
 # nltk.download('all')
 nltk.download(['nps_chat', 'punkt'])
 import re
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import word_tokenize, TweetTokenizer
 from collections import defaultdict, Counter
 from nltk.corpus import nps_chat
 from xml.etree import ElementTree as ET
@@ -18,7 +18,8 @@ class MarkovChainBackoff:
   def __init__(self):
     self.lookup_dict = defaultdict(list)
     self.cfdist = ConditionalFreqDist()
-  
+    self.tweet_tokenizer = TweetTokenizer()
+    
   def add_document_line(self, data, preprocessed=False):
     if not preprocessed:
       preprocessed_list = self._preprocess(data)
@@ -37,8 +38,10 @@ class MarkovChainBackoff:
   def _preprocess(self, string):
     cleaned = re.sub(r'\d{1,2}-\d{1,2}-\w+', ' ', string).lower()
     cleaned = re.sub(r'u\d+', ' ', cleaned)
-    cleaned = re.sub(r'[\W]+', ' ', cleaned)
-    tokenized = word_tokenize(cleaned)
+    # cleaned = re.sub(r'[\W]+', ' ', cleaned)
+    # tokenized = word_tokenize(cleaned)
+    cleaned = re.sub(r"[^\w']+", ' ', cleaned)
+    tokenized = self.tweet_tokenizer.tokenize(text=cleaned)
     return tokenized
 
   def __generate_ntuple_keys(self, data, n):
