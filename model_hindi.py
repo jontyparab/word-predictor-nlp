@@ -132,8 +132,8 @@ def get_sentences(text):
 # for hindi words
 with open('corpus_hindi.txt', encoding="utf8") as fp:
   contents = fp.readlines()
-  for line in contents:
-    sentences = get_sentences(line)
+  for para in contents:
+    sentences = get_sentences(para)
     for sentence in sentences:
         predictor.add_document_line(sentence)
 
